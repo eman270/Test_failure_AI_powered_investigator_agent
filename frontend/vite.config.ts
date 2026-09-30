@@ -10,4 +10,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  server: {
+    proxy: {
+      "/summarize": "http://127.0.0.1:8000",
+      "/ask": "http://127.0.0.1:8000",
+    },
+  },
 });

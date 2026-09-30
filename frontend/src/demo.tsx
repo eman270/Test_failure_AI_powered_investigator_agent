@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { PromptInputBox } from "@/components/ui/ai-prompt-box";
 
-const API_URL = "http://127.0.0.1:8000";
-
 function applySseChunk(
   chunk: string,
   onEvent: (event: string, data: unknown) => void,
@@ -27,7 +25,7 @@ const DemoOne = () => {
     setError("");
     setSummary(null);
     try {
-      const response = await fetch(`${API_URL}/summarize`, {
+      const response = await fetch("/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ test_results: message }),

@@ -87,8 +87,10 @@ def summarize(body: SummarizeRequest) -> Iterator[ServerSentEvent]:
             data={"detail": "The structured output could not be validated"},
         )
 
-app.mount(
-    "/",
-    StaticFiles(directory="frontend/dist", html=True),
-    name="frontend",
-)
+frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+if os.path.isdir(frontend_dist):
+    app.mount(
+        "/",
+        StaticFiles(directory=frontend_dist, html=True),
+        name="frontend",
+    )
