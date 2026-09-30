@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from openai import (
     APIError,
@@ -85,3 +86,9 @@ def summarize(body: SummarizeRequest) -> Iterator[ServerSentEvent]:
             event="error",
             data={"detail": "The structured output could not be validated"},
         )
+
+app.mount(
+    "/",
+    StaticFiles(directory="frontend/dist", html=True),
+    name="frontend",
+)
