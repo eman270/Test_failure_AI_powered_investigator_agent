@@ -12,8 +12,7 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/summarize": "http://127.0.0.1:8000",
-      "/ask": "http://127.0.0.1:8000",
+      "/api": "http://127.0.0.1:8010",
     },
   },
 });

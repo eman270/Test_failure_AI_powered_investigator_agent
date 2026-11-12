@@ -9,7 +9,9 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py analyze_tests.py ./
+COPY main.py analyze_tests.py pytest_parser.py chunking.py agent.py tracing.py ./
+COPY prompts ./prompts
+COPY app ./app
 COPY --from=frontend /src/dist ./frontend/dist
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

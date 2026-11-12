@@ -1,0 +1,26 @@
+{
+  "document_id": "b936e6fe-3346-4307-8f86-4235221a77bd",
+  "filename": "Authentication Guide.txt",
+  "document_type": "technical_reference",
+  "status": "chunked_pending_index",
+  "chunks": [
+    {
+      "document_id": "b936e6fe-3346-4307-8f86-4235221a77bd",
+      "document_type": "technical_reference",
+      "chunk_index": 0,
+      "content": "# Authentication Guide\n\n## HTTP 401\r\nCheck expired tokens and missing headers."
+    },
+    {
+      "document_id": "b936e6fe-3346-4307-8f86-4235221a77bd",
+      "document_type": "technical_reference",
+      "chunk_index": 1,
+      "content": "# Authentication Guide\n\n## HTTP 403\r\nCheck user permissions and roles."
+    },
+    {
+      "document_id": "b936e6fe-3346-4307-8f86-4235221a77bd",
+      "document_type": "technical_reference",
+      "chunk_index": 2,
+      "content": "# Authentication Guide\n\n## HTTP 500\r\nCheck backend logs and exceptions."
+    }
+  ]
+}

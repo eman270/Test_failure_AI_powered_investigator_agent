@@ -1,0 +1,37 @@
+[
+  {
+    "id": "login_401",
+    "description": "Login API returns HTTP 401",
+    "input_log": "FAILED tests/test_auth.py::test_login_success\nAssertionError: expected HTTP 200, got HTTP 401\nResponse: Unauthorized",
+    "expected": {
+      "failure_count": 1,
+      "root_cause_category": "authentication",
+      "diagnosis_keywords": [
+        "authentication",
+        "authorization",
+        "expired token",
+        "invalid token",
+        "invalid credentials",
+        "missing credentials"
+      ],
+      "required_evidence": ["401"]
+    }
+  },
+  {
+    "id": "payment_timeout",
+    "description": "Payment API request times out",
+    "input_log": "FAILED tests/test_payment.py::test_card_payment\nTimeoutError: Payment API did not respond within 30 seconds",
+    "expected": {
+      "failure_count": 1,
+      "root_cause_category": "timeout",
+      "diagnosis_keywords": [
+        "timeout",
+        "timed out",
+        "time out",
+        "response time",
+        "latency"
+      ],
+      "required_evidence": ["payment"]
+    }
+  }
+]

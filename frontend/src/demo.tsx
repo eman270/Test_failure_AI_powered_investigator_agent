@@ -1,87 +1,224 @@
-import { useState } from "react";
-import { PromptInputBox } from "@/components/ui/ai-prompt-box";
+import { FormEvent, useRef, useState } from "react";
+import PromptComposer from "@/components/ui/prompt-composer";
 
-function applySseChunk(
-  chunk: string,
-  onEvent: (event: string, data: unknown) => void,
-) {
-  let event = "message";
-  const dataLines: string[] = [];
-  for (const line of chunk.split("\n")) {
-    if (line.startsWith("event:")) event = line.slice(6).trim();
-    if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+type InvestigationResult =
+  | {
+      status: "awaiting_input";
+      question: string;
+      adk_session_id: string;
+      confirmation_call_id: string;
+    }
+  | {
+      status: "completed";
+      investigation_id: string;
+      review_status: "pending";
+      answer: string;
+    };
+
+type ApiBody = {
+  detail?: unknown;
+  status?: unknown;
+  question?: unknown;
+  adk_session_id?: unknown;
+  confirmation_call_id?: unknown;
+  investigation_id?: unknown;
+  answer?: unknown;
+};
+
+function parseInvestigation(data: ApiBody): InvestigationResult | null {
+  if (
+    data.status === "awaiting_input" &&
+    typeof data.question === "string" &&
+    data.question.trim() &&
+    typeof data.adk_session_id === "string" &&
+    data.adk_session_id.trim() &&
+    typeof data.confirmation_call_id === "string" &&
+    data.confirmation_call_id.trim()
+  ) {
+    return {
+      status: "awaiting_input",
+      question: data.question,
+      adk_session_id: data.adk_session_id,
+      confirmation_call_id: data.confirmation_call_id,
+    };
   }
-  if (dataLines.length === 0) return;
-  onEvent(event, JSON.parse(dataLines.join("\n")));
+
+  // /api/investigate omits status when the report is already finished.
+  if (typeof data.answer === "string" && data.answer.trim()) {
+    return {
+      status: "completed",
+      investigation_id:
+        typeof data.investigation_id === "string" ? data.investigation_id : "",
+      review_status: "pending",
+      answer: data.answer,
+    };
+  }
+
+  return null;
+}
+
+function failureMessage(caught: unknown): string {
+  if (caught instanceof TypeError) return "Could not reach the API.";
+  if (caught instanceof Error && caught.message) return caught.message;
+  return "Could not reach the API.";
+}
+
+async function postJson(path: string, body: object): Promise<ApiBody> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let data: ApiBody = {};
+  try {
+    data = (await response.json()) as ApiBody;
+  } catch {
+    data = {};
+  }
+  if (!response.ok) {
+    const detail = data.detail;
+    throw new Error(typeof detail === "string" ? detail : "The investigation failed");
+  }
+  return data;
 }
 
 const DemoOne = () => {
-  const [summary, setSummary] = useState<unknown>(null);
+  const [result, setResult] = useState<InvestigationResult | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [humanAnswer, setHumanAnswer] = useState("");
+  const loadingRef = useRef(false);
+
+  const applyResponse = (data: ApiBody) => {
+    const next = parseInvestigation(data);
+    if (!next) {
+      setError("The investigation failed");
+      return;
+    }
+    setResult(next);
+    if (next.status === "awaiting_input") {
+      setHumanAnswer("");
+    }
+  };
 
   const handleSendMessage = async (message: string) => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setIsLoading(true);
     setError("");
-    setSummary(null);
+    setResult(null);
+    setHumanAnswer("");
     try {
-      const response = await fetch("/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ test_results: message }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        const detail = data.detail;
-        setError(typeof detail === "string" ? detail : "The API request failed");
-        return;
-      }
-      if (!response.body) {
-        setError("The API returned an empty stream.");
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split("\n\n");
-        buffer = chunks.pop() ?? "";
-        for (const chunk of chunks) {
-          applySseChunk(chunk, (event, data) => {
-            if (event === "error") {
-              const detail = (data as { detail?: unknown }).detail;
-              setError(typeof detail === "string" ? detail : "The API request failed");
-              return;
-            }
-            if (event === "delta" || event === "summary") setSummary(data);
-          });
-        }
-      }
-    } catch {
-      setError("Could not reach the API. Start it with uvicorn on port 8000.");
+      const data = await postJson("/api/investigate", { log: message });
+      applyResponse(data);
+    } catch (caught) {
+      setError(failureMessage(caught));
     } finally {
+      loadingRef.current = false;
       setIsLoading(false);
     }
   };
 
+  const handleHumanAnswer = async (event: FormEvent) => {
+    event.preventDefault();
+    if (loadingRef.current || result?.status !== "awaiting_input") return;
+    const answer = humanAnswer.trim();
+    if (!answer) return;
+
+    loadingRef.current = true;
+    setIsLoading(true);
+    setError("");
+    try {
+      const data = await postJson("/api/investigate/respond", {
+        adk_session_id: result.adk_session_id,
+        confirmation_call_id: result.confirmation_call_id,
+        answer,
+      });
+      applyResponse(data);
+    } catch (caught) {
+      setError(failureMessage(caught));
+    } finally {
+      loadingRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
+  const pending = result?.status === "awaiting_input" ? result : null;
+  const completed = result?.status === "completed" ? result : null;
+
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-[radial-gradient(125%_125%_at_50%_101%,rgba(245,87,2,1)_10.5%,rgba(245,120,2,1)_16%,rgba(245,140,2,1)_17.5%,rgba(245,170,100,1)_25%,rgba(238,174,202,1)_40%,rgba(202,179,214,1)_65%,rgba(148,201,233,1)_100%)]">
-      <div className="w-[500px] p-4">
-        <PromptInputBox
-          onSend={handleSendMessage}
-          isLoading={isLoading}
-          placeholder="Paste test results..."
+    <div
+      style={{
+        width: "100%",
+        minHeight: "100svh",
+        display: "grid",
+        placeItems: "center",
+        padding: "48px 20px",
+        background:
+          "radial-gradient(40% 35% at 30% 35%, rgba(95,178,242,.28), transparent 70%), radial-gradient(35% 30% at 72% 65%, rgba(196,140,255,.22), transparent 70%), #08080a",
+      }}
+    >
+      <div className="flex w-full max-w-[720px] flex-col items-center gap-4">
+        <PromptComposer
+          simulate={false}
+          placeholder="Paste JUnit or pytest output..."
+          prompts={[
+            "Pytest: 2 failed. test_checkout AssertionError expected 200, got 500...",
+            "JUnit: OrderServiceTest.testRefund failed. Expected PAID but was REFUNDED...",
+            "Jest: Cart.test.ts TypeError Cannot read properties of undefined (reading total)...",
+            "Go: TestChargeCard failed. Expected nil error, got context deadline exceeded...",
+          ]}
+          platforms={[
+            { label: "Pytest", icon: "code" },
+            { label: "JUnit", icon: "window" },
+            { label: "Jest", icon: "bolt" },
+            { label: "Go", icon: "bars" },
+          ]}
+          models={["gpt-4o-mini"]}
+          modelNotes={["Structured failure summary"]}
+          onSubmit={(submission) => {
+            void handleSendMessage(submission.prompt);
+          }}
         />
-        {(summary || error) && (
+        {(isLoading || error || completed) && (
           <div
-            className={`mt-4 max-h-60 overflow-auto whitespace-pre-wrap rounded-3xl bg-[#1F2023] p-4 text-sm ${error ? "text-red-300" : "text-gray-100"}`}
+            className={`max-h-96 w-full overflow-auto whitespace-pre-wrap rounded-[26px] bg-[rgba(32,32,36,0.62)] p-5 text-sm shadow-[inset_0_0_0_1px_rgba(214,228,255,0.13)] ${error ? "text-red-300" : "text-[#f5f5f6]"}`}
           >
-            {error || JSON.stringify(summary, null, 2)}
+            {completed?.investigation_id
+              ? `Investigation ${completed.investigation_id}\nReview ${completed.review_status}\n\n`
+              : ""}
+            {error ||
+              completed?.answer ||
+              (pending ? "Continuing the investigation..." : "Investigating the failure...")}
           </div>
+        )}
+        {pending && (
+          <form
+            onSubmit={(event) => {
+              void handleHumanAnswer(event);
+            }}
+            className="flex w-full flex-col gap-3 rounded-[26px] bg-[rgba(32,32,36,0.62)] p-5 shadow-[inset_0_0_0_1px_rgba(214,228,255,0.13)]"
+          >
+            <label htmlFor="human-answer" className="text-sm text-[#f5f5f6]">
+              {pending.question}
+            </label>
+            <textarea
+              id="human-answer"
+              value={humanAnswer}
+              onChange={(event) => setHumanAnswer(event.target.value)}
+              placeholder="Your answer"
+              rows={3}
+              disabled={isLoading}
+              className="w-full resize-y rounded-2xl bg-black/30 px-4 py-3 text-sm text-[#f5f5f6] outline-none placeholder:text-white/40"
+            />
+            <button
+              type="submit"
+              disabled={isLoading || !humanAnswer.trim()}
+              className="self-end rounded-full bg-[#f5f5f6] px-4 py-2 text-sm text-[#08080a] disabled:opacity-40"
+            >
+              {isLoading ? "Sending..." : "Send answer"}
+            </button>
+          </form>
         )}
       </div>
     </div>
